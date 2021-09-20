@@ -30,6 +30,7 @@ from mypy.nodes import TypeInfo
 from mypy.plugin import AttributeContext
 from mypy.plugin import ClassDefContext
 from mypy.plugin import DynamicClassDefContext
+from mypy.plugin import FunctionContext
 from mypy.plugin import Plugin
 from mypy.plugin import SemanticAnalyzerPluginInterface
 from mypy.types import get_proper_type
@@ -72,6 +73,11 @@ class SQLAlchemyPlugin(Plugin):
             elif type_id is names.DECLARATIVE_MIXIN:
                 return _declarative_mixin_hook
 
+        return None
+
+    def get_function_hook(self, fullname: str) -> Optional[Callable[[FunctionContext], Type]]:
+        if names.type_id_for_fullname(fullname) is names.DECLARATIVE_META:
+            return _declarative_mixin_function_hook
         return None
 
     def get_metaclass_hook(
@@ -247,6 +253,24 @@ def _declarative_mixin_hook(ctx: ClassDefContext) -> None:
     decl_class.scan_declarative_assignments_and_apply_types(
         ctx.cls, ctx.api, is_mixin_scan=True
     )
+
+
+def _declarative_mixin_function_hook(ctx: FunctionContext) -> None:
+    if len(ctx.args) == 1:
+        arg = ctx.args[0][0]
+        arg_type = ctx.arg_types[0][0]
+        # arg
+        arg_type
+    # first_ar
+    # instanceof ClassDef
+    # ctx.args
+    # ctx.arg_types
+    pass
+    # _add_globals(ctx)
+    # util.set_is_base(ctx.cls.info)
+    # decl_class.scan_declarative_assignments_and_apply_types(
+    #     ctx.cls, ctx.api, is_mixin_scan=True
+    # )
 
 
 def _metaclass_cls_hook(ctx: ClassDefContext) -> None:
