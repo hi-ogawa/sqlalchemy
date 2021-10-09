@@ -14,10 +14,10 @@ from mypy.nodes import AssignmentStmt
 from mypy.nodes import CallExpr
 from mypy.nodes import Expression
 from mypy.nodes import FuncDef
-from mypy.nodes import MemberExpr
 from mypy.nodes import NameExpr
 from mypy.nodes import RefExpr
 from mypy.nodes import StrExpr
+from mypy.nodes import SymbolNode
 from mypy.nodes import TypeInfo
 from mypy.nodes import Var
 from mypy.plugin import SemanticAnalyzerPluginInterface
@@ -360,7 +360,7 @@ def _infer_type_from_decl_column(
     """
     assert isinstance(node, Var)
 
-    callee = None
+    callee_node: Optional[SymbolNode] = None
 
     if right_hand_expression is None:
         if not isinstance(stmt.rvalue, CallExpr):
@@ -372,15 +372,29 @@ def _infer_type_from_decl_column(
         if isinstance(column_arg, CallExpr):
             if isinstance(column_arg.callee, RefExpr):
                 # x = Column(String(50))
-                callee = column_arg.callee
+                callee_node = column_arg.callee.node
                 type_args: Sequence[Expression] = column_arg.args
                 break
-        elif isinstance(column_arg, (NameExpr, MemberExpr)):
+        elif isinstance(column_arg, RefExpr):
             if isinstance(column_arg.node, TypeInfo):
                 # x = Column(String)
-                callee = column_arg
+                callee_node = column_arg.node
                 type_args = ()
                 break
+            elif isinstance(column_arg.node, Var):
+                print(f"{column_arg.node.type = }")
+                print(api.anal_type(column_arg.node.type))
+            elif (
+                isinstance(column_arg.node, Var)
+                and column_arg.node.type is not None
+                and isinstance(column_arg.node.type, Instance)
+            ):
+                # Resolve trivial indirections with type annotation e.g.
+                #   S: String = String(50)
+                #   class Model(Base):
+                #     x = Column(S)
+                callee_node = column_arg.node.type.type
+                type_args = ()
             else:
                 # x = Column(some_name, String), go to next argument
                 continue
@@ -390,14 +404,14 @@ def _infer_type_from_decl_column(
         else:
             assert False
 
-    if callee is None:
+    if callee_node is None:
         return None
 
-    if isinstance(callee.node, TypeInfo) and names.mro_has_id(
-        callee.node.mro, names.TYPEENGINE
+    if isinstance(callee_node, TypeInfo) and names.mro_has_id(
+        callee_node.mro, names.TYPEENGINE
     ):
         python_type_for_type = extract_python_type_from_typeengine(
-            api, callee.node, type_args
+            api, callee_node, type_args
         )
 
         if left_hand_explicit_type is not None:
